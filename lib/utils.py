@@ -12,7 +12,7 @@ def computeBoxFeatures(bbox1, bbox2):
     width_2, height_2 = bbox2[2] - bbox2[0], bbox2[3] - bbox2[1]
 
     y_rel_dist = 2 * (ymax_1 - ymax_2) / (height_1 + height_2)
-    x_rel_dist = 2 * (xmin_1 - xmin_2) / (height_1 + height_2)
+    x_rel_dist = 2 * (xmin_1 - xmin_2) / (height_1 + height_2) # is this a bug? shouldn't this be width?
     y_rel_size = np.log(height_1 / height_2)
     x_rel_size = np.log(width_1 / width_2)
     return [y_rel_dist, x_rel_dist, y_rel_size, x_rel_size]
@@ -125,7 +125,7 @@ def trackletNMS(src_tracklet, dst_tracklet):
         return 0
     
 def pruneTracks(tracks, nms_thresh):
-    nms_array = np.zeros(np.unique(tracks[:, 1]).shape[0], dtype=np.int)
+    nms_array = np.zeros(np.unique(tracks[:, 1]).shape[0], dtype=np.int32)
     for i in range(nms_array.shape[0]-1):
         for j in range(i+1, nms_array.shape[0]):
             iou = trackletNMS(tracks[tracks[:, 1] == i, :], tracks[tracks[:, 1] == j, :])
@@ -169,7 +169,7 @@ def interpolateTrack(track):
     if len(interpolate_list) != 0:
         track = np.concatenate((track, np.stack(interpolate_list)))
     inds = np.argsort(track[:, 0])
-    track = track[inds].astype(np.int)
+    track = track[inds].astype(np.int32)
     return track
     
 def interpolateTracks(tracks):    

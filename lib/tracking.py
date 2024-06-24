@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 torch.set_printoptions(sci_mode=False)
 from lib.utils import interpolateTrack, interpolateTracks
+from pdb import set_trace as debug
 
 class Tracker(nn.Module):
     def __init__(self, net):
@@ -31,7 +32,7 @@ class Tracker(nn.Module):
         else:
             print('error in solver')
             sol = None
-        return sol
+        return sol, model.runtime
 
     def make_gurobi_model_tracking(self, G, h, A, b, Q, test=False):
         '''
@@ -76,24 +77,28 @@ class Tracker(nn.Module):
         det_gt = np.ones(num_nodes, dtype = np.int32)
         entry_gt = np.zeros(num_nodes, dtype = np.int32)
         exit_gt = np.zeros(num_nodes, dtype = np.int32)
-        tran_gt = np.zeros(data.y.shape[0], dtype = np.int32)
+        tran_gt = np.copy(data.y)
         tran_indicator = np.ones_like(tran_gt)
 
         linkIndexGraph = np.zeros((num_nodes, num_nodes), dtype = np.int32)
-        edge_ind = 0
-        for src_node in range(num_nodes):    
-            for dst_node in range(num_nodes):
-                frame_gap = timestamps[dst_node] - timestamps[src_node]
-                if frame_gap >= 1 and frame_gap <= max_frame_gap:
+        # edge_ind = 0
+        # for src_node in range(num_nodes):    
+        #     for dst_node in range(num_nodes):
+        #         frame_gap = timestamps[dst_node] - timestamps[src_node]
+        #         if frame_gap >= 1 and frame_gap <= max_frame_gap:
         #             print('src_node {} dst_node {}, edge_ind {} frame_gap {} GT conn {}'.format(
         #                   src_node, dst_node, edge_ind, frame_gap, data.y[edge_ind]))
 
-                    tran_gt[edge_ind] = data.y[edge_ind]
-                    edge_ind += 1
-                    linkIndexGraph[src_node, dst_node] = edge_ind #starts from 1
+        #             tran_gt[edge_ind] = data.y[edge_ind]
+        #             edge_ind += 1
+        #             linkIndexGraph[src_node, dst_node] = edge_ind #starts from 1, note this logic assumes edge indices are ordered...
+        # assert linkIndexGraph.max() == edge_ind
+        # assert tran_indicator.sum() == edge_ind
 
-        assert linkIndexGraph.max() == edge_ind
-        assert tran_indicator.sum() == edge_ind
+        for k in range(edges.shape[0]):
+            src_node = int(edges[k,0])
+            dst_node = int(edges[k,1])
+            linkIndexGraph[src_node,dst_node] = k+1
 
         entry_gt = np.zeros(num_nodes, dtype = np.int32)
         exit_gt = np.zeros(num_nodes, dtype = np.int32)
@@ -221,7 +226,8 @@ class Tracker(nn.Module):
                 constraint = np.zeros(num_constraints)
                 constraint[exit_offset + node], constraint[node] = 1, -1
                 A_eq[eq_ind, :] = constraint
-                eq_ind += 1    
+                eq_ind += 1
+                
         return A_eq, b_eq, A_ub, b_ub
     
     def recoverTracklets(self, curr_dets, sol, linkIndexGraph, prune_len=3):
@@ -267,7 +273,7 @@ class Tracker(nn.Module):
                 tracklet = np.concatenate([tracklet_id * np.ones((tracklet.shape[0], 1)),tracklet],axis=1)
                 tracklets.append(tracklet) #tracklet:local_tracklet_id,frame,x1,y1,x2,y2,score,local_det_index
                 tracklet_id += 1
-        tracklets = np.concatenate(tracklets).astype(np.int)
+        tracklets = np.concatenate(tracklets).astype(np.int32)
         tracklets[:, [0, 1]] = tracklets[:, [1, 0]]
         tracklets = np.delete(tracklets, -2, axis=1) #frame,local_tracklet_id,x1,y1,x2,y2,local det index
         return tracklets
@@ -305,12 +311,12 @@ class Tracker(nn.Module):
                 else:
                     interp_tracklets = uninterp_tracklets
                 interp_tracklets = interp_tracklets[np.argsort(interp_tracklets[:, 0])]
-                interp_tracklets = interp_tracklets.astype(np.int)
+                interp_tracklets = interp_tracklets.astype(np.int32)
                 interp_tracklets = np.concatenate([track_id*np.ones([interp_tracklets.shape[0], 1]), interp_tracklets], axis=1)
                 interp_tracklets[:, [0, 1]] = interp_tracklets[:, [1, 0]] #frame,id,xmin,ymin,xmax,ymax
                 tracks.append(interp_tracklets)
             track_id += 1
-        tracks = np.concatenate(tracks).astype(np.int) #tracks in the current batch
+        tracks = np.concatenate(tracks).astype(np.int32) #tracks in the current batch
         return tracks
     
     def build_constraint_tracklet(self, tracklets):
@@ -499,8 +505,8 @@ class Tracker(nn.Module):
                     dst_tracklet = dst_tracklets[dst_tracklets[:, 1] == dst_ind, :]
                     src_frames, dst_frames = src_tracklet[:, 0], dst_tracklet[:, 0]
 
-                    src_centers = ((src_tracklet[:, 2:4] + src_tracklet[:, 4:6])/2).astype(np.int)
-                    dst_centers = ((dst_tracklet[:, 2:4] + dst_tracklet[:, 4:6])/2).astype(np.int)
+                    src_centers = ((src_tracklet[:, 2:4] + src_tracklet[:, 4:6])/2).astype(np.int32)
+                    dst_centers = ((dst_tracklet[:, 2:4] + dst_tracklet[:, 4:6])/2).astype(np.int32)
                     src_vel = (src_centers[1:src_centers.shape[0]] - src_centers[0:-1]).mean(axis=0)
                     frame_gap = dst_tracklet[0, 0] - src_tracklet[-1, 0]
                     estimated_pos = src_centers[-1] + frame_gap * src_vel
@@ -584,9 +590,9 @@ class Tracker(nn.Module):
                 Track.append(curr_track[-1, 0:5])
 
             if len(interpTrack) != 0:
-                Track = np.concatenate([np.array(Track), np.array(interpTrack)], axis=0).astype(np.int)
+                Track = np.concatenate([np.array(Track), np.array(interpTrack)], axis=0).astype(np.int32)
             else:
-                Track = np.array(Track).astype(np.int)
+                Track = np.array(Track).astype(np.int32)
             Track = Track[np.argsort(Track[:, 0])]
             Track = np.concatenate([k*np.ones(Track.shape[0])[:,None], Track], axis=1)
             final_tracks.append(Track)
@@ -596,5 +602,5 @@ class Tracker(nn.Module):
         final_tracks[:, [0, 1]] = final_tracks[:, [1, 0]] #track_id, frame to frame, track_id
         final_tracks[:, 1] += 1                           #since frame index is 1 based
         final_tracks = final_tracks[np.argsort(final_tracks[:, 0]), :] #Convert to matlab evaluation format
-        final_tracks = np.concatenate([final_tracks,-1*np.ones((final_tracks.shape[0], 4))],axis=1).astype(np.int)
+        final_tracks = np.concatenate([final_tracks,-1*np.ones((final_tracks.shape[0], 4))],axis=1).astype(np.int32)
         return final_tracks

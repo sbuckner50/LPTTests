@@ -204,7 +204,7 @@ def QPFunction(eps=1e-12, verbose=0, notImprovedLim=3, maxIter=20, solver=QPSolv
 
             if check_Q_spd:
                 for i in range(nBatch):
-                    e, _ = torch.eig(Q[i])
+                    e, _ = torch.linalg.eig(Q[i])
                     if not torch.all(e[:,0] > 0):
                         raise RuntimeError('Q is not SPD.')
 
