@@ -52,7 +52,7 @@ def get_torchgeometric_data(fname):
                     gt_inds_flat = np.delete(gt_inds_flat, (k), axis=1)
                     break
 
-    return data
+    return data, num_nodes, num_edges
 
 def reduce_window_size(data, window=10):
     # Obtain node IDs that need to be removed
