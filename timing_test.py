@@ -38,12 +38,14 @@ fa_set = []
 T_set = []
 n_samples = 1e6
 max_window = 1e6
+max_k_value = 100
+max_fa_value = 100
 # max_window = 50
 for subfolder in os.listdir(data_folder):
     k = int(get_between(subfolder,'k','_fa'))
     fa = int(get_between(subfolder,'_fa','_T'))
     T = int(get_after(subfolder,'_T'))
-    if T < max_window:
+    if T < max_window and k < max_k_value and fa < max_fa_value:
         print('Loading: ' + subfolder)
         dataset[(k,fa,T)] = []
         for file in os.listdir(data_folder+subfolder):
